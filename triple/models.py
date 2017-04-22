@@ -6,7 +6,7 @@ import base64
 import re
 import time
 import tempfile
-import cPickle as pickle
+import pickle as pickle
 import datetime
 import base64
 from collections import defaultdict
@@ -18,7 +18,7 @@ from django.db import IntegrityError, transaction, connection
 from django.db.models import F
 from django.db.models.query_utils import Q
 from django.contrib.auth.models import User
-from django.contrib.contenttypes import generic
+from django.contrib.contenttypes import fields as generic
 from django.contrib.contenttypes.models import ContentType
 
 try:
@@ -26,9 +26,7 @@ try:
 except ImportError:
     from django.utils import uuid
 
-from uuidfield import UUIDField
-
-from constants import S, P, O, BELONGSTOGRAPH, ANY, MAX_LENGTH
+from .constants import S, P, O, BELONGSTOGRAPH, ANY, MAX_LENGTH
 
 def remove_duplicates(lst):
     """
@@ -68,7 +66,7 @@ def getDictCursor():
             def execute(self, *args, **kwargs):
                 self.cursor.execute(*args, **kwargs)
                 desc = self.cursor.description
-                self._results = [dict(zip([col[0] for col in desc], row)) for row in self.cursor.fetchall()]
+                self._results = [dict(list(zip([col[0] for col in desc], row))) for row in self.cursor.fetchall()]
             def __iter__(self):
                 if self._results is not None:
                     for row in self._results:
@@ -104,7 +102,7 @@ class TripleManager(models.Manager):
         """
         Queries fact objects matching the given criteria.
         """
-        q = super(TripleManager, self).get_query_set()
+        q = super(TripleManager, self).get_queryset()
     
         #TODO:add support for nested/recursive searches, where the subject/predicate/object are query patterns?
         #q = type(self).objects.all()
@@ -255,7 +253,7 @@ class TripleManager(models.Manager):
             key_map = defaultdict(set) # {name:[table.field]}
         
         if q is None:
-            q = super(TripleManager, self).get_query_set()
+            q = super(TripleManager, self).get_queryset()
             
         for arg in args:
             assert isinstance(arg,dict), "Argument must be a dictionary."
@@ -264,11 +262,11 @@ class TripleManager(models.Manager):
             # set of records.
             table_count += 1
             
-            for k,v in arg.iteritems():
+            for k,v in arg.items():
                 
-                assert isinstance(k,basestring), "Invalid key: %s" % (k,)
+                assert isinstance(k,str), "Invalid key: %s" % (k,)
                 
-                if isinstance(v,basestring) and v.startswith('?'):
+                if isinstance(v,str) and v.startswith('?'):
                     if k in (S, P, O):#'subject','predicate','object'):
                         # Translate property name into model field name.
                         #TODO:Use CASE statements to distinguish between simple text and complex objects?
@@ -278,14 +276,14 @@ class TripleManager(models.Manager):
                                    #v+'_object':'%s._%s_object'%(get_current_table_name(),k),
                                    v[1:]+'_id':'%s._%s_id'%(get_current_table_name(),k),
                                    v[1:]+'_type_id':'%s._%s_type_id'%(get_current_table_name(),k)}
-                        for __k,__v in _select.iteritems(): key_map[__k].add(__v)
+                        for __k,__v in _select.items(): key_map[__k].add(__v)
                         q = q.extra(select=_select, tables=tables)
                     else:
                         tables = get_tables()#?
                         _select = {v[1:]:'%s.%s'%(get_current_table_name(),k)}
-                        for __k,__v in _select.iteritems(): key_map[__k].add(__v)
+                        for __k,__v in _select.items(): key_map[__k].add(__v)
                         q = q.extra(select=_select, tables=tables)
-                    select_values.extend(_select.keys())
+                    select_values.extend(list(_select.keys()))
                     continue
                 
                 # Extract variable name from key.
@@ -315,7 +313,7 @@ class TripleManager(models.Manager):
                         # the list of SELECT variables.
                         if var_name:
                             _select = {var_name:'%s._%s_id'%(get_current_table_name(),k)}
-                            for __k,__v in _select.iteritems(): key_map[__k].add(__v)
+                            for __k,__v in _select.items(): key_map[__k].add(__v)
                             q = q.extra(select=_select)
                             select_values.append(var_name)
                             
@@ -344,7 +342,7 @@ class TripleManager(models.Manager):
                             
                         junk_count += 1
                         _select = {'_j%i'%junk_count:'%s.id'%get_current_table_name()}
-                        for __k,__v in _select.iteritems(): key_map[__k].add(__v)
+                        for __k,__v in _select.items(): key_map[__k].add(__v)
                         q = q.extra(select=_select,
                                     tables=tables,
                                     where=["%s._%s_text = '%s'"%(get_current_table_name(),k,str(v))])
@@ -365,7 +363,7 @@ class TripleManager(models.Manager):
                             if parent_var_name:
                                 _select[parent_var_name] = "%s._%s_text" % (get_grandparent_table_name(),parent_field,)
                                 select_values.append(parent_var_name)
-                            for __k,__v in _select.iteritems(): key_map[__k].add(__v)
+                            for __k,__v in _select.items(): key_map[__k].add(__v)
                             q = q.extra(select=_select,
                                         tables=None,
                                         where=["%s._%s_text = %s._subject_text" % (get_grandparent_table_name(),parent_field,get_current_table_name(),)])
@@ -374,7 +372,7 @@ class TripleManager(models.Manager):
                         # the list of SELECT variables.
                         if var_name:
                             _select = {var_name:'%s._%s_text'%(get_current_table_name(),k)}
-                            for __k,__v in _select.iteritems(): key_map[__k].add(__v)
+                            for __k,__v in _select.items(): key_map[__k].add(__v)
                             q = q.extra(select=_select)
                             select_values.append(var_name)
                 else:
@@ -388,7 +386,7 @@ class TripleManager(models.Manager):
                     
                     if var_name:
                         _select = {var_name:'%s.%s'%(get_current_table_name(),k)}
-                        for __k,__v in _select.iteritems(): key_map[__k].add(__v)
+                        for __k,__v in _select.items(): key_map[__k].add(__v)
                         q = q.extra(select=_select)
                         select_values.append(var_name)
         
@@ -404,7 +402,7 @@ class TripleManager(models.Manager):
             # t2._predicate_id, then we'll add to the WHERE clause
             # t1._object_id = t2._predicate_id.
             _where = []
-            for k,v in key_map.iteritems():
+            for k,v in key_map.items():
             
                 # Skip fake column names.
                 if k.startswith('_'):
@@ -456,7 +454,7 @@ class TripleManager(models.Manager):
                     for row in self.q:
                         # Lookup GenericForeignKey objects.
                         _types = []
-                        for _k in row.keys():
+                        for _k in list(row.keys()):
                             if _k.endswith('_type_id') and _k.replace('_type_id','_id') in row:
                                 if _k.replace('_type_id','_text') in row:
                                     if row[_k.replace('_type_id','_text')] is None:
@@ -522,7 +520,7 @@ def expand_triple_argument(arg, gid=None, triples=None):
     Triple('I','replied',{'to':'#sentence1','with':'#response3'}).save()
     """
     if isinstance(arg, dict):
-        arg = arg.iteritems()
+        arg = iter(arg.items())
     elif type(arg) not in (tuple,list):
         return arg
     id = '#'+str(uuid.uuid4())
@@ -574,7 +572,7 @@ def GID(value):
 class Triple(models.Model):#_BaseModel):
     #gid = models.CharField(max_length=100, blank=True, null=True, db_index=True)
     #gid = models.ForeignKey(GraphId, blank=True, null=True)
-    uuid = UUIDField(blank=False, null=False, db_index=True, unique=True)
+    uuid = models.UUIDField(blank=False, null=False, db_index=True, unique=True,default=uuid.uuid4)
     #creation_timestamp = models.DateTimeField(auto_now_add=True, blank=False, null=False, db_index=True)
     #last_check_timestamp = models.DateTimeField(auto_now_add=True, blank=False, null=False, db_index=True)
     
@@ -745,7 +743,7 @@ class Literal(object):
         
     @property
     def is_variable(self):
-        return isinstance(self.value, basestring) and self.value.startswith('?')
+        return isinstance(self.value, str) and self.value.startswith('?')
         
     def __hash__(self):
         return hash(self.value)
@@ -773,9 +771,9 @@ class Thing(object):
         if subject is not None and subject != ANY:
             self.subject = Literal(subject)
         self.items = {}
-        for k,v in kwargs.iteritems():
-            assert isinstance(k, basestring)
-            if isinstance(v, models.Model) or isinstance(v, basestring) or type(v) in (bool,int,float):
+        for k,v in kwargs.items():
+            assert isinstance(k, str)
+            if isinstance(v, models.Model) or isinstance(v, str) or type(v) in (bool,int,float):
                 v = Literal(v)
             else:
                 assert isinstance(v, dict)
@@ -810,7 +808,7 @@ class Thing(object):
         local_aliases = []
         if variable_map is None:
             variable_map = defaultdict(set) # {variable_name:set([column names])}
-        for k,v in self.items.iteritems():
+        for k,v in self.items.items():
             
             # Track query of special internal columns.
             if isinstance(k,Literal) and k.value.startswith('_'):
@@ -849,7 +847,7 @@ class Thing(object):
                 elif self.subject.is_variable:
                     variable_map[self.subject.value].add("%s._subject_text" % table_alias)
                 else:
-                    assert isinstance(self.subject.value, basestring)
+                    assert isinstance(self.subject.value, str)
                     where.append("%s._subject_text = %s" % (table_alias, self.subject.sql()))
             
             # Add predicate to WHERE clause.
@@ -911,13 +909,13 @@ class Query(object):
             where = kwargs
         if where is not None:
             if isinstance(where, dict):
-                for k,v in where.iteritems():
+                for k,v in where.items():
                     assert isinstance(v, D)
                     self.things.append(Thing(subject=k, **v))
             else:
                 assert isinstance(where, list), "Where argument must be a dictionary or list of (key,value) tuples."
                 for item in where:
-                    if isinstance(item,basestring):
+                    if isinstance(item,str):
                         self.constraints.append(item)
                     else:
                         k,v = item
@@ -994,7 +992,7 @@ def _build_sql(select, tables, where, variable_map, order_by, limit):
     """
     # Add column constraints implied by duplicate variable name
     # usage.
-    for _variable_name,_columns in variable_map.iteritems():
+    for _variable_name,_columns in variable_map.items():
         _last = None
         for _column in sorted(_columns):
             if _last:

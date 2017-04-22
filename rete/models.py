@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
-import decimal, re, time, datetime, cPickle as pickle, base64, uuid
+import decimal, re, time, datetime, pickle as pickle, base64, uuid
 
-from django.contrib.contenttypes import generic
+from django.contrib.contenttypes import fields as generic
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.db.models.query_utils import Q
-from django.utils.encoding import smart_str, smart_unicode
+from django.utils.encoding import smart_str, smart_text
 
 from triple.constants import \
     ID_IDX, \
@@ -22,7 +22,8 @@ from triple.constants import \
 from triple.models import Triple
 from triple.utils import nested_to_triples
 
-from constants import *
+from .constants import *
+from functools import reduce
 
 def _print(*args):
 #    print ' '.join(map(str, args))
@@ -33,7 +34,7 @@ def is_variable(value):
     Returns true if the given string represents a variable, denoted by
     starting with a "?".
     """
-    return isinstance(value, basestring) and value.strip().startswith('?')
+    return isinstance(value, str) and value.strip().startswith('?')
 
 class _BaseModel(models.Model):
     
@@ -101,7 +102,7 @@ class Condition(_BaseModel):
         """
         import ast
         assert production is None or isinstance(production, Production)
-        assert (len(parts) == 1 and isinstance(parts[0],basestring)) or len(parts) == len(FIELD_INDEXES), "Invalid parts length: %s" % (str(parts),)
+        assert (len(parts) == 1 and isinstance(parts[0],str)) or len(parts) == len(FIELD_INDEXES), "Invalid parts length: %s" % (str(parts),)
         if len(parts) == 1:
             expression = parts[0]
             # Escape variables.
@@ -158,8 +159,8 @@ class Condition(_BaseModel):
             # Extract operator from field value.
             # If missing, assumed to be equality.
             op_idx = EQ_IDX
-            if not isinstance(field_value, unicode):
-                field_value = unicode(field_value,'utf-8')
+            if not isinstance(field_value, str):
+                field_value = str(field_value,'utf-8')
             #print field_value[0]
             if field_value[0] in OPERATION_NAMES:
                 op_idx = OP_NAME_TO_IDX[field_value[0]]
@@ -777,7 +778,7 @@ class Rete(_BaseModel):
                 for wme in parent.alphanode.items.all():
                     parent.right_activation(wme, children=[new_node])
         else:
-            raise Exception, "Unknown parent type '%s' for %s node." % (type(parent).__name__, type(new_node).__name,)
+            raise Exception("Unknown parent type '%s' for %s node." % (type(parent).__name__, type(new_node).__name,))
 
     def iter_run(self):
         """
@@ -794,12 +795,12 @@ class Rete(_BaseModel):
                 if not result:
                     break
                 triple,delete = result
-                print 'handling triple queue:',triple,delete
+                print('handling triple queue:',triple,delete)
                 
                 # Remove the triple from the network if it's already
                 # been added.
                 if top_anode.items.filter(id=triple.id).count():
-                    print '\tremoving:',triple
+                    print('\tremoving:',triple)
                     self.remove_wme(triple)
                     
                 if delete:
@@ -807,11 +808,11 @@ class Rete(_BaseModel):
                     _anodes = AlphaNode.objects.filter(parent__isnull=True,
                                                        items__id=triple.id)
                     if not _anodes.count():
-                        print '\tpermanently deleting:',triple
+                        print('\tpermanently deleting:',triple)
                         triple.delete()
                 else:
                     # Add the triple to the network if we're not deleting it.
-                    print '\tadding:',triple
+                    print('\tadding:',triple)
                     self.add_wme(triple)
             
             pnodes = self.triggered_pnodes
@@ -832,20 +833,20 @@ class Rete(_BaseModel):
                             pending_adds.extend(effect._do(self, vars, graphs=[CURRENT]))
                         
             yield pending_updates, pending_adds
-            print 'pending_updates:',len(pending_updates)
-            print 'pending_adds:',len(pending_adds)
+            print('pending_updates:',len(pending_updates))
+            print('pending_adds:',len(pending_adds))
             
             # Reset trigger counts.
             self.push_pnode_trigger_stack()
             
             # Apply pending updates.
             for update_effect,update_vars in pending_updates:
-                print '\tupdating:',update_effect,update_vars
+                print('\tupdating:',update_effect,update_vars)
                 pending_adds.extend(update_effect._do(self, update_vars))
                 
             # Apply pending adds.
             for wme in pending_adds:
-                print '\tadding:',wme
+                print('\tadding:',wme)
                 self.add_wme(wme)
 
 class AlphaNode(_BaseModel):
@@ -886,7 +887,7 @@ class AlphaNode(_BaseModel):
         field_name = self.field_name
         operation_name = self.operation_name
         value = self.value
-        return smart_str(u"<%s:%i %s %s %s>" % (type(self).__name__, self.id, field_name, operation_name, value))
+        return smart_str("<%s:%i %s %s %s>" % (type(self).__name__, self.id, field_name, operation_name, value))
     
     @property
     def field_name(self):
@@ -1222,9 +1223,9 @@ class BetaJoinNode(_BaseModel):
                 # Convert triple field to integer if it's being tested against the
                 # ID field.
                 if test.field_of_arg1 == ID_IDX or test.field_of_arg2 == ID_IDX:
-                    if isinstance(arg1, basestring) and arg1.isdigit():
+                    if isinstance(arg1, str) and arg1.isdigit():
                         arg1 = int(arg1)
-                    if isinstance(arg2, basestring) and arg2.isdigit():
+                    if isinstance(arg2, str) and arg2.isdigit():
                         arg2 = int(arg2)
                         
                 if arg1 != arg2:
@@ -1508,7 +1509,7 @@ class State(object):
             elif isinstance(part, Condition):
                 self.parts.append(part.parts)
             else:
-                raise Exception, "Invalid part type: %s" % (type(part).__name__,)
+                raise Exception("Invalid part type: %s" % (type(part).__name__,))
     
     def to_condition_group(self):
         cg = ConditionGroup().save()
@@ -1528,7 +1529,7 @@ class State(object):
                 parts = ['?'+part[1:] if uuid_pattern.findall(part) else part for part in parts]
             yield Condition.get(None, *parts)
             
-    def iter_triples(self, allow_unsatisfied_variables=False):
+    def iter_triples(self, allow_unsatisfied_variables=True):
         """
         Creates triples from the given parts and returns
         a generator iterating over them. 
@@ -1541,17 +1542,17 @@ class State(object):
             #print part
             id,s,p,o = part
             #print id,s,p,o
-            for match in id_pattern.findall(unicode(s)):
+            for match in id_pattern.findall(str(s)):
                 #print 'match:',match
-                if match in id_key or not allow_unsatisfied_variables:
+                if match in id_key.keys() or not allow_unsatisfied_variables:
                     s = s.replace(match, id_key[match])
-            for match in id_pattern.findall(unicode(p)):
+            for match in id_pattern.findall(str(p)):
                 #print 'match:',match
-                if match in id_key or not allow_unsatisfied_variables:
+                if match in id_key.keys() or not allow_unsatisfied_variables:
                     p = p.replace(match, id_key[match])
-            for match in id_pattern.findall(unicode(o)):
+            for match in id_pattern.findall(str(o)):
                 #print 'match:',match
-                if match in id_key or not allow_unsatisfied_variables:
+                if match in id_key.keys() or not allow_unsatisfied_variables:
                     o = o.replace(match, id_key[match])
             wme = T(*[s,p,o])
             if len(id) > 1:
@@ -1566,7 +1567,7 @@ class _ReteAction(object):
     
     def _lookup(self, value, vars):
         assert isinstance(vars, dict)
-        if isinstance(value, basestring) and value.startswith('?') and len(value) > 1:
+        if isinstance(value, str) and value.startswith('?') and len(value) > 1:
             value = vars[value[1:]]
         return value
     
@@ -1583,7 +1584,7 @@ class Create(_ReteAction):
         for part in parts:
             assert isinstance(part, dict)
         self.var_map = var_map or {}
-        for k,v in self.var_map.iteritems():
+        for k,v in self.var_map.items():
             
             # Confirm test contains a valid Python expression.
             ret = ast.parse(v)
@@ -1592,7 +1593,7 @@ class Create(_ReteAction):
     def _lookup(self, value, vars):
         from triple.utils import dt
         assert isinstance(vars, dict)
-        if isinstance(value, basestring) and value.startswith('?') and len(value) > 1:
+        if isinstance(value, str) and value.startswith('?') and len(value) > 1:
             key = value[1:]
             if key in vars:
                 # Lookup value from variable map.

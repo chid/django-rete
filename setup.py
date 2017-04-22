@@ -32,7 +32,6 @@ setup(name='django-rete',
         'rete',
         'triple'
     ],
-    requires=['django-uuidfield'],
     cmdclass={
         'test': TestCommand,
     },

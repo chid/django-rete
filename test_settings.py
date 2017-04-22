@@ -9,10 +9,14 @@ DATABASES = {
     }
 }
 INSTALLED_APPS = [
-    #'django.contrib.auth',
+    'django.contrib.auth',
     'django.contrib.contenttypes',
     #'django.contrib.sessions',
     #'django.contrib.sites',
     'triple',
     'rete',
 ]
+
+from django.utils.crypto import get_random_string
+chars = 'abcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*(-_=+)'
+SECRET_KEY = get_random_string(50, chars)

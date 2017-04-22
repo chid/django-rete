@@ -1,10 +1,10 @@
 import os, sys, random, time
-import cPickle as pickle
+import pickle as pickle
 from pprint import pprint
 from collections import defaultdict
 
 from django.test import TestCase
-from django.utils import unittest
+# from django.utils import unittest
 from django.db import IntegrityError, transaction, connection
 from django.db.models.query_utils import Q
 from django.contrib.contenttypes.models import ContentType
@@ -26,7 +26,7 @@ class Test(TestCase):
         ], gid='#graph1')
         q = list(Triple.objects.all())
         self.assertEqual(len(q), 4)
-        self.assertTrue(isinstance(id, basestring))
+        self.assertTrue(isinstance(id, str))
         
 #        id = T([
 #            ('is', [('#hardware', '#drive')]),
@@ -38,7 +38,7 @@ class Test(TestCase):
         }, gid='#graph2')
         q = list(Triple.objects.all())
         self.assertEqual(len(q), 8)
-        self.assertTrue(isinstance(id, basestring))
+        self.assertTrue(isinstance(id, str))
         
         # Query triples in a specific graph.
 #        g2 = models.GraphId.objects.get(value='#graph2')
@@ -115,5 +115,5 @@ class Test(TestCase):
         q = Triple.objects.all()
         self.assertEqual(len(q), 4)
         for t in q:
-            print t
+            print(t)
         

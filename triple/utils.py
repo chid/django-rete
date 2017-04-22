@@ -1,6 +1,6 @@
 import uuid
 
-from constants import DONT_CARE
+from .constants import DONT_CARE
 
 def nested_to_triples(nested, parent_value=None, as_vars=False, id=None):
     """
@@ -25,7 +25,7 @@ def nested_to_triples(nested, parent_value=None, as_vars=False, id=None):
     """
     triples = []
     if isinstance(nested, dict):
-        nested = nested.items()
+        nested = list(nested.items())
     if parent_value is None:
         for k,v in nested:
             triples.extend(nested_to_triples(v, parent_value=k, as_vars=as_vars))
@@ -45,13 +45,13 @@ def nested_to_triples(nested, parent_value=None, as_vars=False, id=None):
                 for ex in extra:
                     attr,val = ex.split('=')
                     assert attr in ('id',), "Only id inline attribute supported."
-                    exec "%s = '%s'" % (attr,val)
+                    exec("%s = '%s'" % (attr,val))
             if ':' in predicate:
                 predicate,extra = predicate.split(':')[0],predicate.split(':')[1:]
                 for ex in extra:
                     attr,val = ex.split('=')
                     assert attr in ('id',), "Only id inline attribute supported."
-                    exec "%s = '%s'" % (attr,val)
+                    exec("%s = '%s'" % (attr,val))
                 
             if type(rest) in (tuple, list, dict):
                 # Composite object.
@@ -67,12 +67,12 @@ def nested_to_triples(nested, parent_value=None, as_vars=False, id=None):
             else:
                 # Literal object.
                 #assert isinstance(rest, basestring)
-                if isinstance(rest, basestring) and ':' in rest:
+                if isinstance(rest, str) and ':' in rest:
                     rest,extra = rest.split(':')[0],rest.split(':')[1:]
                     for ex in extra:
                         attr,val = ex.split('=')
                         assert attr in ('id',), "Only id inline attribute supported."
-                        exec "%s = '%s'" % (attr,val)
+                        exec("%s = '%s'" % (attr,val))
                         
                 if as_vars:
                     triples.append([id,subject,predicate,rest])
